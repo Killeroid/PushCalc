@@ -63,15 +63,8 @@
 (def global-node-selection-tournament-size (atom 2))
 (def global-pop-when-tagging (atom true))
 (def global-reuse-errors (atom true))
-(def global-use-single-thread (atom false))
 
-;; Historically-assessed hardness (http://hampshire.edu/lspector/pubs/kleinspector-gptp08-preprint.pdf)
-;; using the "Previous Generation / Difference" method. One should not reuse errors with 
-;; historically-assessed hardness, and one should consider using a smaller error-threshold.
-;; Total errors in individuals will be scaled. (For improved performance one could reuse errors
-;; but just recalculate total errors each generation, but this is not done yet.)
-(def global-use-historically-assessed-hardness (atom false))
-(def solution-rates (atom (repeat 0)))
+(def global-use-single-thread (atom false))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; random code generator
@@ -1803,23 +1796,16 @@ normal, or :abnormal otherwise."
 ;; Populations are vectors of agents with individuals as their states (along with error and
 ;; history information).
 
-(defrecord individual [program errors total-error history ancestors])
+(defrecord individual [program errors total-error history ancestors oper])
 
-(defn make-individual [& {:keys [program errors total-error history ancestors]
+(defn make-individual [& {:keys [program errors total-error history ancestors oper]
                           :or {program nil
                                errors nil
                                total-error nil ;; a non-number is used to indicate no value
                                history nil
-                               ancestors nil}}]
-  (individual. program errors total-error history ancestors))
-
-(defn compute-total-error
-  [errors]
-  (if @global-use-historically-assessed-hardness
-    (reduce + (map (fn [rate e] (* (- 1.01 rate) e))
-                   @solution-rates
-                   errors))
-    (reduce + errors)))
+                               ancestors nil
+                               oper nil}}]
+  (individual. program errors total-error history ancestors oper))
 
 (defn choose-node-index-with-leaf-probability
   "Returns an index into tree, choosing a leaf with probability 
@@ -1876,7 +1862,8 @@ by @global-node-selection-method."
         :history (:history ind) 
         :ancestors (if maintain-ancestors
                      (cons (:program ind) (:ancestors ind))
-                     (:ancestors ind)))
+                     (:ancestors ind))
+        :oper (:oper ind))
       (let [new-program (if (< (lrand-int 5) 4)
                           ;; remove a small number of random things
                           (loop [p program how-many (inc (lrand-int 2))]
@@ -1891,7 +1878,7 @@ by @global-node-selection-method."
                               (insert-code-at-point program point-index (flatten-seqs point))
                               program)))
             new-errors (error-function new-program)
-            new-total-errors (compute-total-error new-errors)]
+            new-total-errors (reduce + new-errors)]
         (if (<= new-total-errors total-errors)
           (recur (inc step) new-program new-errors new-total-errors)
           (recur (inc step) program errors total-errors))))))
@@ -1922,6 +1909,7 @@ by @global-node-selection-method."
       (printf "\nTotal: %s" (:total-error best))(flush)
       (printf "\nHistory: %s" (not-lazy (:history best)))(flush)
       (printf "\nSize: %s" (count-points (:program best)))(flush)
+      (printf "\nOperator: %s" (not-lazy (:oper best)))(flush)
       (print "\n--- Population Statistics ---\nAverage total errors in population: ")(flush)
       (print (* 1.0 (/ (reduce + (map :total-error sorted)) (count population))))(flush)
       (printf "\nMedian total errors in population: %s"
@@ -1964,7 +1952,8 @@ by @global-node-selection-method."
       (make-individual :program new-program :history (:history ind)
         :ancestors (if maintain-ancestors
                      (cons (:program ind) (:ancestors ind))
-                     (:ancestors ind))))))
+                     (:ancestors ind))
+        :oper "Mutate"))))
 
 ;; some utilities are required for gaussian mutation
 
@@ -1998,7 +1987,8 @@ num-perturb-probability."
     :history (:history ind)
     :ancestors (if maintain-ancestors
                  (cons (:program ind) (:ancestors ind))
-                 (:ancestors ind))))
+                 (:ancestors ind))
+    :oper "Gaussian Mutate"))
 
 (defn crossover 
   "Returns a copy of parent1 with a random subprogram replaced with a random 
@@ -2014,7 +2004,24 @@ subprogram of parent2."
       (make-individual :program new-program :history (:history parent1)
         :ancestors (if maintain-ancestors
                      (cons (:program parent1) (:ancestors parent1))
-                     (:ancestors parent1))))))
+                     (:ancestors parent1))
+        :oper "Crossover"))))
+
+(defn sizeFairMutation
+  "Returns an evaluated individual resulting from the replacement of a subtree
+   with a randomly generated subtree with same number of points."
+  [ind max-points atom-generators]
+  (let [place (select-node-index (:program ind))
+        stree (random-code-with-size (count-points place) atom-generators)
+        new-program (insert-code-at-point (:program ind) place stree)]
+    (if (> (count-points new-program) max-points)
+      ind
+      (make-individual :program new-program :history (:history ind)
+                       :ancestors (if maintain-ancestors
+                                    (cons (:program ind) (:ancestors ind))
+                                    (:ancestors ind))
+                       :oper "Size Fair Mutation"))))
+
 
 (defn evaluate-individual
   "Returns the given individual with errors and total-errors, computing them if necessary."
@@ -2027,41 +2034,44 @@ subprogram of parent2."
               (error-function p))
           te (if (and (number? (:total-error i)) @global-reuse-errors)
                (:total-error i)
-               (keep-number-reasonable (compute-total-error e)))]
+               (keep-number-reasonable (reduce + e)))]
 ;(println te)(flush) ;***
       (make-individual :program p :errors e :total-error te 
         :history (if maintain-histories (cons te (:history i)) (:history i))
-        :ancestors (:ancestors i)))))
+        :ancestors (:ancestors i)
+        :oper (:oper i)))))
 
 (defn breed
   "Replaces the state of the given agent with an individual bred from the given population (pop), 
-using the given parameters."
+   using the given parameters."
   [agt location rand-gen pop error-function population-size max-points atom-generators 
-   mutation-probability  mutation-max-points crossover-probability simplification-probability 
-   tournament-size reproduction-simplifications trivial-geography-radius
-   gaussian-mutation-probability gaussian-mutation-per-number-mutation-probability 
-   gaussian-mutation-standard-deviation]
+   mutation-probability mutation-max-points crossover-probability sizeFairMutation-probability 
+   simplification-probability tournament-size reproduction-simplifications                          trivial-geography-radius gaussian-mutation-probability                                           gaussian-mutation-per-number-mutation-probability gaussian-mutation-standard-deviation]
   (binding [thread-local-random-generator rand-gen]
     (let [n (lrand)]
       (cond 
         ;; mutation
         (< n mutation-probability)
         (mutate (select pop tournament-size trivial-geography-radius location) 
-          mutation-max-points max-points atom-generators)
+                mutation-max-points max-points atom-generators)
         ;; crossover
         (< n (+ mutation-probability crossover-probability))
         (let [first-parent (select pop tournament-size trivial-geography-radius location)
               second-parent (select pop tournament-size trivial-geography-radius location)]
           (crossover first-parent second-parent max-points))
+        ;; sizeFairMutation
+        (< n (+ mutation-probability crossover-probability sizeFairMutation-probability))
+        (sizeFairMutation (select pop tournament-size trivial-geography-radius location) 
+                          max-points atom-generators)
         ;; simplification
-        (< n (+ mutation-probability crossover-probability simplification-probability))
+        (< n (+ mutation-probability crossover-probability sizeFairMutation-probability simplification-probability))
         (auto-simplify (select pop tournament-size trivial-geography-radius location)
-          error-function reproduction-simplifications false 1000)
+                       error-function reproduction-simplifications false 1000)
         ;; gaussian mutation
-        (< n (+ mutation-probability crossover-probability simplification-probability 
-               gaussian-mutation-probability))
+        (< n (+ mutation-probability crossover-probability sizeFairMutation-probability simplification-probability 
+                gaussian-mutation-probability))
         (gaussian-mutate (select pop tournament-size trivial-geography-radius location) 
-          gaussian-mutation-per-number-mutation-probability gaussian-mutation-standard-deviation)
+                         gaussian-mutation-per-number-mutation-probability gaussian-mutation-standard-deviation)
         ;; replication
         true 
         (select pop tournament-size trivial-geography-radius location)))))
@@ -2149,15 +2159,14 @@ example."
 
 (defn pushgp
   "The top-level routine of pushgp."
-  [& {:keys [error-function error-threshold population-size max-points atom-generators max-generations
-             max-mutations mutation-probability mutation-max-points crossover-probability 
-             simplification-probability tournament-size report-simplifications final-report-simplifications
-             reproduction-simplifications trivial-geography-radius decimation-ratio decimation-tournament-size
-             evalpush-limit evalpush-time-limit node-selection-method node-selection-leaf-probability
+  [& {:keys [error-function error-threshold population-size max-points atom-generators                        max-generations max-mutations mutation-probability mutation-max-points 
+             crossover-probability sizeFairMutation-probability simplification-probability 
+             tournament-size report-simplifications final-report-simplifications
+             reproduction-simplifications trivial-geography-radius decimation-ratio                           decimation-tournament-size evalpush-limit evalpush-time-limit 
+             node-selection-method node-selection-leaf-probability
              node-selection-tournament-size pop-when-tagging gaussian-mutation-probability 
-             gaussian-mutation-per-number-mutation-probability gaussian-mutation-standard-deviation
-             reuse-errors problem-specific-report use-single-thread random-seed 
-             use-historically-assessed-hardness]
+             gaussian-mutation-per-number-mutation-probability                                                gaussian-mutation-standard-deviation reuse-errors problem-specific-report 
+             use-single-thread random-seed]
       :or {error-function (fn [p] '(0)) ;; pgm -> list of errors (1 per case)
            error-threshold 0
            population-size 1000
@@ -2167,9 +2176,10 @@ example."
                                      (fn [] (lrand-int 100))
                                      (fn [] (lrand))))
            max-generations 1001
-           mutation-probability 0.4
+           mutation-probability 0.3
            mutation-max-points 20
-           crossover-probability 0.4
+           crossover-probability 0.3
+           sizeFairMutation-probability 0.2
            simplification-probability 0.1
            tournament-size 7
            report-simplifications 100
@@ -2187,11 +2197,10 @@ example."
            gaussian-mutation-probability 0.0
            gaussian-mutation-per-number-mutation-probability 0.5
            gaussian-mutation-standard-deviation 0.1
-           reuse-errors true
-           problem-specific-report default-problem-specific-report
+           	   reuse-errors true
+           	   problem-specific-report default-problem-specific-report
            use-single-thread false
-           random-seed (System/nanoTime)   
-           use-historically-assessed-hardness false        
+           random-seed (System/nanoTime)           
            }}]
   (binding [thread-local-random-generator (java.util.Random. random-seed)]
     ;; set globals from parameters
@@ -2204,7 +2213,6 @@ example."
     (reset! global-node-selection-tournament-size node-selection-tournament-size)
     (reset! global-pop-when-tagging pop-when-tagging)
     (reset! global-reuse-errors reuse-errors)
-    (reset! global-use-historically-assessed-hardness use-historically-assessed-hardness)
     (printf "\nStarting PushGP run.\n\n") (flush)
     (printf "Clojush version = ")
     (try
@@ -2240,13 +2248,14 @@ example."
     (print-params 
       (error-function error-threshold population-size max-points atom-generators max-generations 
                       mutation-probability mutation-max-points crossover-probability
-                      simplification-probability gaussian-mutation-probability 
-                      gaussian-mutation-per-number-mutation-probability gaussian-mutation-standard-deviation
+                      sizeFairMutation-probability simplification-probability 
+                      gaussian-mutation-probability 
+                      gaussian-mutation-per-number-mutation-probability                                                gaussian-mutation-standard-deviation
                       tournament-size report-simplifications final-report-simplifications
-                      trivial-geography-radius decimation-ratio decimation-tournament-size evalpush-limit
+                      trivial-geography-radius decimation-ratio decimation-tournament-size                             evalpush-limit
                       evalpush-time-limit node-selection-method node-selection-tournament-size
                       node-selection-leaf-probability pop-when-tagging reuse-errors
-                      use-single-thread random-seed use-historically-assessed-hardness
+                      use-single-thread random-seed
                       ))
     (printf "\nGenerating initial population...\n") (flush)
     (let [pop-agents (vec (doall (for [_ (range population-size)] 
@@ -2265,23 +2274,21 @@ example."
         (dorun (map #((if use-single-thread swap! send) % evaluate-individual error-function %2) pop-agents rand-gens))
         (when-not use-single-thread (apply await pop-agents)) ;; SYNCHRONIZE ; might this need a dorun?
         (printf "\nDone computing errors.") (flush)
-        ;; calculate solution rates if necessary for historically-assessed hardness
-        (when use-historically-assessed-hardness
-          (reset! solution-rates
-                  (let [error-seqs (map :errors (map deref pop-agents))
-                        num-cases (count (first error-seqs))]
-                    (doall (for [i (range num-cases)]
-                             (/ (count (filter #(<= % error-threshold) (map #(nth % i) error-seqs)))
-                                population-size)))))
-          (printf "\nSolution rates: ")
-          (println (doall (map float @solution-rates))))
+        ;
+        ;; some debugging code trying to track down nil agent results.... leaving in case not fixed
+        ;(println (map :total-error (vec (doall (map deref pop-agents)))))(flush) ;***
+        ;(loop [ers (map :total-error (vec (doall (map deref pop-agents))))] ;***
+        ;  (when (some not ers) 
+        ;    (println (map :total-error (vec (doall (map deref pop-agents)))))(flush) 
+        ;    (recur (map :total-error (vec (doall (map deref pop-agents)))))))
+        ;
         ;; report and check for success
         (let [best (report (vec (doall (map deref pop-agents))) generation error-function 
                            report-simplifications problem-specific-report)]
           (if (<= (:total-error best) error-threshold)
-            (do (printf "\n\nSUCCESS at generation %s\nSuccessful program: %s\nErrors: %s\nTotal error: %s\nHistory: %s\nSize: %s\n\n"
+            (do (printf "\n\nSUCCESS at generation %s\nSuccessful program: %s\nErrors: %s\nTotal error: %s\nHistory: %s\nSize: %s\nOperator: %s\n\n"
                         generation (not-lazy (:program best)) (not-lazy (:errors best)) (:total-error best) 
-                        (not-lazy (:history best)) (count-points (:program best)))
+                        (not-lazy (:history best)) (count-points (:program best)) (not-lazy (:oper best)))
                 (when print-ancestors-of-solution
                   (printf "\nAncestors of solution:\n")
                   (println (:ancestors best)))
@@ -2296,11 +2303,11 @@ example."
                         (dotimes [i population-size]
                           ((if use-single-thread swap! send)
                                (nth child-agents i) 
-                               breed i (nth rand-gens i) pop error-function population-size max-points atom-generators 
-                               mutation-probability mutation-max-points crossover-probability 
-                               simplification-probability tournament-size reproduction-simplifications 
+                               breed i (nth rand-gens i) pop error-function population-size                                     max-points atom-generators mutation-probability                                                  mutation-max-points  crossover-probability 
+                               sizeFairMutation-probability simplification-probability 
+                               tournament-size reproduction-simplifications 
                                trivial-geography-radius gaussian-mutation-probability 
-                               gaussian-mutation-per-number-mutation-probability gaussian-mutation-standard-deviation)))
+                               gaussian-mutation-per-number-mutation-probability                                                gaussian-mutation-standard-deviation)))
                       (when-not use-single-thread (apply await child-agents)) ;; SYNCHRONIZE
                       (printf "\nInstalling next generation...") (flush)
                       (dotimes [i population-size]
