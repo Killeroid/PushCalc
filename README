@@ -1,0 +1,51 @@
+README
+
+Kwaku Yeboah Antwi (ky10@hampshire.edu), 
+
+The whole point of this project is to genetically evolve a Calculator.
+The Calculator takes characters from a buffer(currently simulated),
+pops it onto the string stack, one character at a time, and then
+evolves a program that will recognize what the inputs are and mean
+and perform all the necessary computation.
+
+AVAILABILITY
+
+https://github.com/Killeroid/PushCalc
+
+REQUIREMENTS
+
+To use this code you must have a Clojure programming environment; see 
+http://clojure.org/. The current version of clojush requires clojure 1.2
+and clojure-contrib 1.2.
+
+Clojure is available for most OS platforms. Good starting points for
+obtaining and using Clojure include http://clojure.org/getting_started
+and http://www.assembla.com/wiki/show/clojure/Getting_Started.
+
+QUICKSTART
+
+To run the system on a simple example start a clojure REPL (read, evaluate,
+print loop) in the directory that contains clojush.clj and the examples 
+subdirectory and type the following to the REPL prompt: 
+
+    (load "Calculator/core")
+
+This will load everything and run PushGP on the inputs.
+
+If you have Leiningen (from https://github.com/technomancy/leiningen)
+then you can run an example from the OS command line with a call like:
+
+    lein run Calculator.core
+
+In some IDEs there will be other ways to run the examples. For example,
+in Eclipse/Counterclockwise you can simply open an example and select
+Clojure > Load clojure file in REPL.
+
+You may want to provide additional arguments to java in order to allow 
+access to more memory and/or to take maximal advantage of Clojure's
+concurrency support in the context of clojush's reliance on garbage 
+collection. For example, you might want to provide arguments such 
+as -Xmx2000m and -XX:+UseParallelGC.
+
+
+
