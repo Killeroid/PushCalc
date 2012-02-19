@@ -2046,7 +2046,9 @@ subprogram of parent2."
    using the given parameters."
   [agt location rand-gen pop error-function population-size max-points atom-generators 
    mutation-probability mutation-max-points crossover-probability sizeFairMutation-probability 
-   simplification-probability tournament-size reproduction-simplifications                          trivial-geography-radius gaussian-mutation-probability                                           gaussian-mutation-per-number-mutation-probability gaussian-mutation-standard-deviation]
+   simplification-probability tournament-size reproduction-simplifications trivial-geography-radius 
+   gaussian-mutation-probability gaussian-mutation-per-number-mutation-probability 
+   gaussian-mutation-standard-deviation]
   (binding [thread-local-random-generator rand-gen]
     (let [n (lrand)]
       (cond 
@@ -2159,13 +2161,16 @@ example."
 
 (defn pushgp
   "The top-level routine of pushgp."
-  [& {:keys [error-function error-threshold population-size max-points atom-generators                        max-generations max-mutations mutation-probability mutation-max-points 
+  [& {:keys [error-function error-threshold population-size max-points atom-generators 
+             max-generations max-mutations mutation-probability mutation-max-points 
              crossover-probability sizeFairMutation-probability simplification-probability 
              tournament-size report-simplifications final-report-simplifications
-             reproduction-simplifications trivial-geography-radius decimation-ratio                           decimation-tournament-size evalpush-limit evalpush-time-limit 
+             reproduction-simplifications trivial-geography-radius decimation-ratio 
+             decimation-tournament-size evalpush-limit evalpush-time-limit 
              node-selection-method node-selection-leaf-probability
              node-selection-tournament-size pop-when-tagging gaussian-mutation-probability 
-             gaussian-mutation-per-number-mutation-probability                                                gaussian-mutation-standard-deviation reuse-errors problem-specific-report 
+             gaussian-mutation-per-number-mutation-probability 
+             gaussian-mutation-standard-deviation reuse-errors problem-specific-report 
              use-single-thread random-seed]
       :or {error-function (fn [p] '(0)) ;; pgm -> list of errors (1 per case)
            error-threshold 0

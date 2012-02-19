@@ -37,18 +37,13 @@
   (try (do (apply (ns-resolve *ns* (symbol (str x))) [1 1]) true)
        (catch Exception e false)))
 
-(defn toInt
+(defn Int_str
   "Convert integer to string"
   [x]
   (if (string? x)
     (try (Integer/parseInt x)
          (catch Exception e nil))
     nil))
-
-(defn findargs
-  "Find # of arguments x has"
-  [x]
-  (:arglists (meta x)))
 
 
 (defn tostr
@@ -104,8 +99,8 @@
 
 (define-registered string_concat_Int
                    (fn [state]
-                     (let [x1 (toInt (stack-ref :string 1 state))
-                           x2 (toInt (stack-ref :string 1 state))]
+                     (let [x1 (Int_str (stack-ref :string 1 state))
+                           x2 (Int_str (stack-ref :string 1 state))]
                        (if (or (not= x1 nil)
                                (not= x2 nil))
                          (push-item (str x1 x2) :string
@@ -162,11 +157,12 @@
 (defn init_stack
   "Pushes a string unto the string stack, one character a time"
   [x]
-  (loop [n (dec (count x)) state (make-push-state)]
-    (if (< n 0)
-      state
-      (recur (dec n) (push-item (str (nth x n)) :string 
-                                (push-item (str (nth x n)) :auxiliary state))))))
+  (let [y (apply str (reverse x))]
+    (loop [n (dec (count y)) state (make-push-state)]
+      (if (< n 0)
+        state
+        (recur (dec n) (push-item (str (nth y n)) :string 
+                                  (push-item (str (nth y n)) :auxiliary state)))))))
 
 (define-registered in 
                    (fn [state]
@@ -210,6 +206,6 @@
                                  (tag-instruction-erc [:exec :integer :symbol] 1000)
                                  (tagged-instruction-erc 1000)))                     
   :max-points 100
-  :max-generations 100000)
+  :max-generations 10)
 
-(System/exit 0)
+;(System/exit 0) ;;Comment this line out if you're running this from clooj or an IDE
