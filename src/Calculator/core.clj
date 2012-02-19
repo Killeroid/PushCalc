@@ -207,6 +207,7 @@
                                  (tag-instruction-erc [:exec :integer :symbol] 1000)
                                  (tagged-instruction-erc 1000)))                     
   :max-points 100
-  :max-generations 100000)
+  :max-generations 100000
+  :reuse-errors false)
 
 (System/exit 0) ;;Comment this line out if you're running this from clooj or an IDE
