@@ -99,13 +99,15 @@
 
 (define-registered string_concat_Int
                    (fn [state]
-                     (let [x1 (Int_str (stack-ref :string 1 state))
-                           x2 (Int_str (stack-ref :string 1 state))]
-                       (if (or (not= x1 nil)
-                               (not= x2 nil))
-                         (push-item (str x1 x2) :string
-                                    (pop-item :string (pop-item :string state)))
-                         state))))
+                     (if (not (empty? (rest (:string state))))
+                       (let [x1 (Int_str (stack-ref :string 1 state))
+                             x2 (Int_str (stack-ref :string 0 state))]
+                         (if (or (not= x1 nil)
+                                 (not= x2 nil))
+                           (push-item (str x1 x2) :string
+                                      (pop-item :string (pop-item :string state)))
+                           state))
+                       state)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;Symbol instructions
@@ -178,8 +180,15 @@
 (def test_data {"2*3" 6
                 "5+9" 14
                 "8/2" 4
-                "45" 45 ;;Barfs on this input
-                "30-1" 29})
+                "45" 45
+                "783023" 783023
+                "30-1" 29
+                "23*2/2" 23
+                "6-4*55" 110
+                "21/3*18" 126
+                "13/10+5" 6
+                "10-1+6*2" 30
+                "450*1-1" 449})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; PushGP call
@@ -194,7 +203,7 @@
                               top-num (top-item :integer state)]
                           (if (number? top-num)
                             (abs (- top-num (nth (vals test_data) input)))
-                            100)))))
+                            1000000)))))
   :atom-generators (concat (registered-for-type :symbol)
                            (registered-for-type :integer)
                            ;(registered-for-type :string)
@@ -208,6 +217,7 @@
                                  (tagged-instruction-erc 1000)))                     
   :max-points 100
   :max-generations 100000
-  :reuse-errors false)
+  :reuse-errors false
+  :use-historically-assessed-hardness true)
 
 (System/exit 0) ;;Comment this line out if you're running this from clooj or an IDE

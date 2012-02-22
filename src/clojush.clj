@@ -63,8 +63,15 @@
 (def global-node-selection-tournament-size (atom 2))
 (def global-pop-when-tagging (atom true))
 (def global-reuse-errors (atom true))
-
 (def global-use-single-thread (atom false))
+
+;; Historically-assessed hardness (http://hampshire.edu/lspector/pubs/kleinspector-gptp08-preprint.pdf)
+;; using the "Previous Generation / Difference" method. One should not reuse errors with
+;; historically-assessed hardness, and one should consider using a smaller error-threshold.
+;; Total errors in individuals will be scaled. (For improved performance one could reuse errors
+;; but just recalculate total errors each generation, but this is not done yet.)
+(def global-use-historically-assessed-hardness (atom false))
+(def solution-rates (atom (repeat 0)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; random code generator
@@ -1807,6 +1814,14 @@ normal, or :abnormal otherwise."
                                oper nil}}]
   (individual. program errors total-error history ancestors oper))
 
+(defn compute-total-error
+  [errors]
+  (if @global-use-historically-assessed-hardness
+    (reduce + (map (fn [rate e] (* (- 1.01 rate) e))
+                   @solution-rates
+                   errors))
+    (reduce + errors)))
+
 (defn choose-node-index-with-leaf-probability
   "Returns an index into tree, choosing a leaf with probability 
 @global-node-selection-leaf-probability."
@@ -1878,7 +1893,7 @@ by @global-node-selection-method."
                               (insert-code-at-point program point-index (flatten-seqs point))
                               program)))
             new-errors (error-function new-program)
-            new-total-errors (reduce + new-errors)]
+            new-total-errors (compute-total-error new-errors)]
         (if (<= new-total-errors total-errors)
           (recur (inc step) new-program new-errors new-total-errors)
           (recur (inc step) program errors total-errors))))))
@@ -2034,7 +2049,7 @@ subprogram of parent2."
               (error-function p))
           te (if (and (number? (:total-error i)) @global-reuse-errors)
                (:total-error i)
-               (keep-number-reasonable (reduce + e)))]
+               (keep-number-reasonable (compute-total-error e)))]
 ;(println te)(flush) ;***
       (make-individual :program p :errors e :total-error te 
         :history (if maintain-histories (cons te (:history i)) (:history i))
@@ -2171,7 +2186,7 @@ example."
              node-selection-tournament-size pop-when-tagging gaussian-mutation-probability 
              gaussian-mutation-per-number-mutation-probability 
              gaussian-mutation-standard-deviation reuse-errors problem-specific-report 
-             use-single-thread random-seed]
+             use-single-thread random-seed use-historically-assessed-hardness]
       :or {error-function (fn [p] '(0)) ;; pgm -> list of errors (1 per case)
            error-threshold 0
            population-size 1000
@@ -2205,7 +2220,8 @@ example."
            reuse-errors true
            problem-specific-report default-problem-specific-report
            use-single-thread false
-           random-seed (System/nanoTime)           
+           random-seed (System/nanoTime)
+           use-historically-assessed-hardness false            
            }}]
   (binding [thread-local-random-generator (java.util.Random. random-seed)]
     ;; set globals from parameters
@@ -2218,6 +2234,7 @@ example."
     (reset! global-node-selection-tournament-size node-selection-tournament-size)
     (reset! global-pop-when-tagging pop-when-tagging)
     (reset! global-reuse-errors reuse-errors)
+    (reset! global-use-historically-assessed-hardness use-historically-assessed-hardness)
     (printf "\nStarting PushGP run.\n\n") (flush)
     (printf "Clojush version = ")
     (try
@@ -2254,13 +2271,13 @@ example."
       (error-function error-threshold population-size max-points atom-generators max-generations 
                       mutation-probability mutation-max-points crossover-probability
                       sizeFairMutation-probability simplification-probability 
-                      gaussian-mutation-probability 
-                      gaussian-mutation-per-number-mutation-probability                                                gaussian-mutation-standard-deviation
-                      tournament-size report-simplifications final-report-simplifications
-                      trivial-geography-radius decimation-ratio decimation-tournament-size                             evalpush-limit
-                      evalpush-time-limit node-selection-method node-selection-tournament-size
+                      gaussian-mutation-probability gaussian-mutation-per-number-mutation-probability
+                      gaussian-mutation-standard-deviation tournament-size report-simplifications 
+                      final-report-simplifications trivial-geography-radius decimation-ratio 
+                      decimation-tournament-size evalpush-limit evalpush-time-limit 
+                      node-selection-method node-selection-tournament-size
                       node-selection-leaf-probability pop-when-tagging reuse-errors
-                      use-single-thread random-seed
+                      use-single-thread random-seed use-historically-assessed-hardness
                       ))
     (printf "\nGenerating initial population...\n") (flush)
     (let [pop-agents (vec (doall (for [_ (range population-size)] 
@@ -2279,14 +2296,16 @@ example."
         (dorun (map #((if use-single-thread swap! send) % evaluate-individual error-function %2) pop-agents rand-gens))
         (when-not use-single-thread (apply await pop-agents)) ;; SYNCHRONIZE ; might this need a dorun?
         (printf "\nDone computing errors.") (flush)
-        ;
-        ;; some debugging code trying to track down nil agent results.... leaving in case not fixed
-        ;(println (map :total-error (vec (doall (map deref pop-agents)))))(flush) ;***
-        ;(loop [ers (map :total-error (vec (doall (map deref pop-agents))))] ;***
-        ;  (when (some not ers) 
-        ;    (println (map :total-error (vec (doall (map deref pop-agents)))))(flush) 
-        ;    (recur (map :total-error (vec (doall (map deref pop-agents)))))))
-        ;
+        ;; calculate solution rates if necessary for historically-assessed hardness
+        (when use-historically-assessed-hardness
+          (reset! solution-rates
+                  (let [error-seqs (map :errors (map deref pop-agents))
+                        num-cases (count (first error-seqs))]
+                    (doall (for [i (range num-cases)]
+                             (/ (count (filter #(<= % error-threshold) (map #(nth % i) error-seqs)))
+                                population-size)))))
+          (printf "\nSolution rates: ")
+          (println (doall (map float @solution-rates))))
         ;; report and check for success
         (let [best (report (vec (doall (map deref pop-agents))) generation error-function 
                            report-simplifications problem-specific-report)]
