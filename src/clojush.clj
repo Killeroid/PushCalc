@@ -75,14 +75,15 @@
 (def solution-rates (atom (repeat 0)))
 
 
-
-;; Dynamically Scaling Genetic Operator Usage (DSGOU)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; -- Dynamically Scaling Genetic Operator Usage(DSGOU) --
 ;; Changes the probability of each operator being called
 ;; The changes are reliant on how often a operator was responsible for
-;; the best individuals in each run
-;; Each probability = (+ (* (/ # best_indivs_by_oper generations) 0.6)+ 0.5)
-;; See indepth explanation in probabilities function
-;; 
+;; the best individuals in previous generations
+;; Each operators probability is (# prev_best_indivs_created_by_operator/ generations_number)
+;; Each mutation operator has a threshold of x so
+;; the final probability is the calculated probability + x
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
 ;; List of operators
 (def global-use-DSGOU (atom true))
 (def global-operator-probability-threshold (atom 0.05))
@@ -366,11 +367,14 @@ numbers in the demo output."
     (apply list lst)
     lst))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Each operators probability is (# prev_best_indivs_created_by_operator/ generations_number)
+;; Each mutation operator has a threshold of x so
+;; the final probability is the calculated probability + x
+;; The simplification operator has a default threshold of 0.1
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (defn probability_calculator
   "Calculate probabilities of each mutation operator being selected
-   Each probability is (# previous individuals created by operator/ # of generations)
-   Each mutation operator has a threshold of x probability of being selected so
-   the final probability is the calculated probability + 0.05
    Returns a list of all the probabilities"
   ([generation opers] (probability_calculator generation opers 0.1))
   ([generation opers simplification-probability]  
@@ -2105,44 +2109,6 @@ subprogram of parent2."
         :history (if maintain-histories (cons te (:history i)) (:history i))
         :ancestors (:ancestors i)
         :oper (:oper i)))))
-
-;(defn breed
-;  "Replaces the state of the given agent with an individual bred from the given population (pop), 
-;   using the given parameters."
-;  [agt location rand-gen pop error-function population-size max-points atom-generators 
-;   mutation-probability mutation-max-points crossover-probability sizeFairMutation-probability 
-;   simplification-probability tournament-size reproduction-simplifications trivial-geography-radius 
-;   gaussian-mutation-probability gaussian-mutation-per-number-mutation-probability 
-;   gaussian-mutation-standard-deviation]
-;  (binding [thread-local-random-generator rand-gen]
-;    (let [n (lrand)]
-;      (cond 
-;        ;; mutation
-;        (< n mutation-probability)
-;        (mutate (select pop tournament-size trivial-geography-radius location) 
-;                mutation-max-points max-points atom-generators)
-;        ;; crossover
-;        (< n (+ mutation-probability crossover-probability))
-;        (let [first-parent (select pop tournament-size trivial-geography-radius location)
-;              second-parent (select pop tournament-size trivial-geography-radius location)]
-;          (crossover first-parent second-parent max-points))
-;        ;; sizeFairMutation
-;        (< n (+ mutation-probability crossover-probability sizeFairMutation-probability))
-;        (sizeFairMutation (select pop tournament-size trivial-geography-radius location) 
-;                          max-points atom-generators)
-;        ;; simplification
-;        (< n (+ mutation-probability crossover-probability sizeFairMutation-probability simplification-probability))
-;        (auto-simplify (select pop tournament-size trivial-geography-radius location)
-;                       error-function reproduction-simplifications false 1000)
-;        ;; gaussian mutation
-;        (< n (+ mutation-probability crossover-probability sizeFairMutation-probability simplification-probability 
-;                gaussian-mutation-probability))
-;        (gaussian-mutate (select pop tournament-size trivial-geography-radius location) 
-;                         gaussian-mutation-per-number-mutation-probability gaussian-mutation-standard-deviation)
-;        ;; replication
-;        true 
-;        (select pop tournament-size trivial-geography-radius location)))))
-
 
 
 (defn breed
