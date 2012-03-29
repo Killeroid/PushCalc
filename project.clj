@@ -1,4 +1,4 @@
-(defproject PushCalc "0.0.6"
+(defproject PushCalc "0.0.7"
   :description "Evolving a calculator in PushGP"
   :dependencies [[org.clojure/clojure "1.2.1"]
                  [org.clojure/clojure-contrib "1.2.0"]
