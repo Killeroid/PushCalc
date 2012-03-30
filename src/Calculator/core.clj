@@ -38,7 +38,7 @@
        (catch Exception e false)))
 
 (defn Int_str
-  "Convert integer to string"
+  "Convert string to integer"
   [x]
   (if (string? x)
     (try (Integer/parseInt x)
@@ -147,7 +147,7 @@
         state)
       state)))
 
-(define-registered symbol_call (caller :symbol))
+;(define-registered symbol_call (caller :symbol))
 
 
 (define-registered symbol_pop (popper :symbol))
@@ -346,13 +346,15 @@
                            (list 'in
                                  (tag-instruction-erc [:exec :integer :boolean :symbol] 1000)
                                  (tagged-instruction-erc 1000)
-                                 (tagged-when-instruction-erc 1000)))                     
+                                 (tagged-when-instruction-erc 1000)
+                                 ))                     
   :max-points 100
-  :max-generations 10000
+  :max-generations 500
   :reuse-errors false
+  :use-single-thread true
   :use-historically-assessed-hardness false
   :dynamically-scaling-genetic-operator-usage false
   :variable-max-points true)
 
-(System/exit 0) ;;Comment this line out if you're running this from clooj or an IDE
+;(System/exit 0) ;;Comment this line out if you're running this from clooj or an IDE
 

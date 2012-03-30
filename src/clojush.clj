@@ -2462,7 +2462,7 @@ example."
                                   (java.util.Random. (+ random-seed (inc k))))))]
       (loop [generation 0]
         (printf "\n\n-----\nProcessing generation: %s\nComputing errors..." generation) (flush)
-        (dorun (map #((if use-single-thread swap! send) % evaluate-individual error-function %2) pop-agents rand-gens))
+        (dorun (map #((if use-single-thread swap! send) %1 evaluate-individual error-function %2) pop-agents rand-gens))
         (when-not use-single-thread (apply await pop-agents)) ;; SYNCHRONIZE ; might this need a dorun?
         (printf "\nDone computing errors.") (flush)
         ;; calculate solution rates if necessary for historically-assessed hardness
