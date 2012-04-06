@@ -83,10 +83,13 @@
 (define-registered string_toSymbol
                    (fn [state]
                      (if (not (empty? (:string state)))
-                       (if (isoperator? (top-item :string state))
+                       (let [item (top-item :string state)]
+                       (if (or (isoperator? item)
+                               (.equals (str item) "_")
+                               (.equals (str item) "="))
                          (->> (push-item (top-item :string state) :symbol state)
                               (pop-item :string))
-                         state)
+                         state))
                        state)))
                      
 (define-registered string_toInt
@@ -110,6 +113,21 @@
                        state)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;Integer instructions
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn negator
+  [type]
+  (fn [state]
+    (if (not (empty? (type state)))
+      (let [item (top-item type state)]
+        (->> (pop-item type state)
+             (push-item (* (abs item) -1) type)))
+      state)))
+
+(define-registered integer_neg (negator :integer)) 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;Symbol instructions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -130,6 +148,11 @@
 (define-registered symbol_div (symb-eqer :symbol '/))
 
 (define-registered symbol_mult (symb-eqer :symbol '*))
+
+(define-registered symbol_neg (symb-eqer :symbol '"_"))
+
+(define-registered symbol_answer (symb-eqer :symbol '"="))
+
 
 
 
@@ -163,6 +186,21 @@
 ;; Fitness function helper functions
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(def buttons (list 0 1 2 3 4 5 6 7 8 9 "+" "-" "*" "/" "_" "=")) ;;The list of buttons on calc
+
+(defn assign-tags
+  "Takes a list of buttons, assigns tags to each button.
+   Tags spread out evenly. Distance between consecutive tags are all equal
+   Returns a state with the buttons tagged"
+  [things state]
+  (if (not (empty? things))
+    (let [interval (round (/ 1000 (count things)))]
+    (loop [counter (dec (count things)) stack (sorted-map)]
+      (if (< counter 0)
+        (assoc state :tag stack)
+        (recur (dec counter) (assoc stack (* counter interval) (nth things counter))))))))
+         
+      
 (defn init_stack
   "Pushes a string unto the string stack, one character a time"
   [x]
@@ -172,6 +210,39 @@
         state
         (recur (dec n) (push-item (str (nth y n)) :string 
                                   (push-item (str (nth y n)) :auxiliary state)))))))
+
+(defn init_stack_with_tags
+  "Initializes state with preliminary tags"
+  [things]
+  (assign-tags things (make-push-state)))
+
+(defn tag-of
+  "Returns the tag that refers to x
+   Searches the list given and finds
+   position of input. The tag is the position * interval"
+  [x things]
+  (let [interval (round (/ 1000 (count things)))]
+    (loop [counter (dec (count things))]
+      (if (< counter 0)
+        nil
+        (if (= (str x) (str (nth things counter)))
+          (symbol (str "tagged_" (str (* interval counter))))
+          (recur (dec counter)))))))
+
+(defn run-system
+  "Runs program and then simulate button presses
+   Program is run inbetween each keypress
+   Bnk of buttons can be found in things"
+  [program things problem]
+  (let [size (count problem)]
+    (loop [counter 0 state (run-push program (init_stack_with_tags things))]
+      (if (>= counter size)
+        (run-push program state)
+        (recur (inc counter) (run-push program (push-item (tag-of (nth problem counter) things) 
+                                                          :exec state)))))))
+  
+  
+  
 
 (define-registered in 
                    (fn [state]
@@ -195,7 +266,8 @@
                 "21/3*18" 126
                 "13/10+5" 6
                 "10-1+6*2" 30
-                "450*1-1" 449})
+                "450*1-1" 449
+                "_4*_7" 28})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; PushGP call
@@ -205,9 +277,8 @@
 (pushgp
   :error-function (fn [program]
                     (doall
-                      (for [input (range 0 (count test_data))]
-                        (let [state (run-push program
-                                              (init_stack (nth (keys test_data) input)))
+                      (for [input (range (count test_data))]
+                        (let [state (run-system program buttons (nth (keys test_data) input))
                               top-num (top-item :integer state)]
                           (if (number? top-num)
                             (abs (- top-num (nth (vals test_data) input)))
@@ -215,6 +286,7 @@
   :atom-generators (concat (registered-for-type :symbol)
                            '(integer_add
                               integer_eq
+                              integer_neg
                               integer_swap
                               ;integer_yank
                               integer_dup
@@ -349,12 +421,12 @@
                                  (tagged-when-instruction-erc 1000)
                                  ))                     
   :max-points 100
-  :max-generations 500
+  :max-generations 10000
   :reuse-errors false
-  :use-single-thread true
-  :use-historically-assessed-hardness false
+  :use-single-thread false
+  :use-historically-assessed-hardness true
   :dynamically-scaling-genetic-operator-usage false
   :variable-max-points true)
 
-;(System/exit 0) ;;Comment this line out if you're running this from clooj or an IDE
+(System/exit 0) ;;Comment this line out if you're running this from clooj or an IDE
 

@@ -91,13 +91,13 @@
 
 
 
-;; The variable size system.
+;; The variable size system
 ;; When in use, pograms have a choice in how big they can get.
 ;; They will however be penalized by how bigger they are than
 ;; max points.
 ;; During selection, size-error is used to select the best individual returned 
 ;; from the population
-;; size-error = (+ total-error (average-size-of-top-10%-of-pop))
+;; size-error = (+ total-error (- size_individual (average-size-of-top-10%-of-pop)))
 ;;
 ;; The selected individul is sent to brred for mutation
 ;; Global-max-points-in-program is used during mutation
