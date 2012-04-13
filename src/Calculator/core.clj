@@ -219,7 +219,7 @@
    Bnk of buttons can be found in things"
   [program things problem]
   (let [size (count problem)]
-    (loop [counter 0 state (run-push program (init_stack things))]
+    (loop [counter 0 state (run-push program (make-push-state))]
       (if (>= counter size)
         (run-push program state)
         (recur (inc counter) (run-push program (push-item (tag-of (nth problem counter) things) 
