@@ -424,9 +424,10 @@
   :max-generations 10000
   :reuse-errors false
   :use-single-thread false
-  :use-historically-assessed-hardness true
-  :dynamically-scaling-genetic-operator-usage false
-  :variable-max-points true)
+  :use-historically-assessed-hardness false
+  :dynamically-scaling-genetic-operator-usage true
+  :variable-max-points false
+  :use-lexicase-selection true)
 
 (System/exit 0) ;;Comment this line out if you're running this from clooj or an IDE
 

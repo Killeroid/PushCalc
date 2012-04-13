@@ -64,6 +64,7 @@
 (def global-pop-when-tagging (atom true))
 (def global-reuse-errors (atom true))
 (def global-use-single-thread (atom false))
+(def global-use-lexicase-selection (atom false)) ;;Use lexicase-selection or not
 
 ;; Historically-assessed hardness (http://hampshire.edu/lspector/pubs/kleinspector-gptp08-preprint.pdf)
 ;; using the "Previous Generation / Difference" method. 
@@ -2088,7 +2089,8 @@ by @global-node-selection-method."
       (problem-specific-report best population generation error-function report-simplifications)
       best)))
 
-(defn select
+
+(defn tournament-selection
   "Conducts a tournament and returns the individual with the lower total error."
   [pop tournament-size radius location]
   (let [tournament-set 
@@ -2104,6 +2106,27 @@ by @global-node-selection-method."
                  (if @global-use-historically-assessed-hardness :hah-error :total-error))]
     (reduce (fn [i1 i2] (if (< (err-fn i1) (err-fn i2)) i1 i2))
             tournament-set)))
+
+(defn lexicase-selection
+  "Lexicase selection"
+  [pop tournament-size]
+  (loop [survivors pop
+         cases (shuffle (range (count (:errors (first pop)))))]
+    (if (or (empty? cases)
+            (empty? (rest survivors)))
+      (first survivors)
+      (let [min-err-for-case (apply min (map #(nth % (first cases))
+                                             (map #(:errors %) survivors)))]
+        (recur (filter #(= (nth (:errors %) (first cases)) min-err-for-case)
+                       survivors)
+               (rest cases)))))) 
+
+(defn select
+  ([pop tournament-size] select pop tournament-size 0 0)
+  ([pop tournament-size radius location]
+    (if @global-use-lexicase-selection
+      (lexicase-selection pop tournament-size)
+      (tournament-selection pop tournament-size radius location))))
 
 (defn mutate 
   "Returns a mutated version of the given individual."
@@ -2347,7 +2370,7 @@ example."
              pop-when-tagging gaussian-mutation-probability gaussian-mutation-per-number-mutation-probability 
              gaussian-mutation-standard-deviation reuse-errors problem-specific-report use-single-thread 
              random-seed use-historically-assessed-hardness dynamically-scaling-genetic-operator-usage
-             operator-probability-threshold max-points-radius variable-max-points]
+             operator-probability-threshold max-points-radius variable-max-points use-lexicase-selection]
       :or {error-function (fn [p] '(0)) ;; pgm -> list of errors (1 per case)
            error-threshold 0
            population-size 1000
@@ -2386,7 +2409,8 @@ example."
            dynamically-scaling-genetic-operator-usage true
            operator-probability-threshold 0.05
            max-points-radius 10
-           variable-max-points true       
+           variable-max-points true
+           use-lexicase-selection false       
            }}]
   (binding [thread-local-random-generator (java.util.Random. random-seed)]
     ;; set globals from parameters
@@ -2404,6 +2428,7 @@ example."
     (reset! global-operator-probability-threshold operator-probability-threshold)
     (reset! global-max-points-radius max-points-radius)
     (reset! global-variable-max-points variable-max-points)
+    (reset! global-use-lexicase-selection use-lexicase-selection)
     (printf "\nStarting PushGP run.\n\n") (flush)
     (printf "Clojush version = ")
     (try
@@ -2447,7 +2472,7 @@ example."
                       node-selection-leaf-probability pop-when-tagging reuse-errors
                       use-single-thread random-seed use-historically-assessed-hardness
                       dynamically-scaling-genetic-operator-usage operator-probability-threshold
-                      max-points-radius variable-max-points))
+                      max-points-radius variable-max-points use-lexicase-selection))
     (printf "\nGenerating initial population...\n") (flush)
     (let [pop-agents (vec (doall (for [_ (range population-size)] 
                                    ((if use-single-thread atom agent)
@@ -2466,7 +2491,8 @@ example."
         (when-not use-single-thread (apply await pop-agents)) ;; SYNCHRONIZE ; might this need a dorun?
         (printf "\nDone computing errors.") (flush)
         ;; calculate solution rates if necessary for historically-assessed hardness
-        (when use-historically-assessed-hardness
+        (when (and use-historically-assessed-hardness
+                   (not use-lexicase-selection))
           (reset! solution-rates
                   (let [error-seqs (map :errors (map deref pop-agents))
                         num-cases (count (first error-seqs))]
