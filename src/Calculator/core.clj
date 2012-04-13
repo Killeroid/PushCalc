@@ -188,18 +188,6 @@
 
 (def buttons (list 0 1 2 3 4 5 6 7 8 9 "+" "-" "*" "/" "_" "=")) ;;The list of buttons on calc
 
-(defn assign-tags
-  "Takes a list of buttons, assigns tags to each button.
-   Tags spread out evenly. Distance between consecutive tags are all equal
-   Returns a state with the buttons tagged"
-  [things state]
-  (if (not (empty? things))
-    (let [interval (round (/ 1000 (count things)))]
-    (loop [counter (dec (count things)) stack (sorted-map)]
-      (if (< counter 0)
-        (assoc state :tag stack)
-        (recur (dec counter) (assoc stack (* counter interval) (nth things counter))))))))
-         
       
 (defn init_stack
   "Pushes a string unto the string stack, one character a time"
@@ -211,10 +199,6 @@
         (recur (dec n) (push-item (str (nth y n)) :string 
                                   (push-item (str (nth y n)) :auxiliary state)))))))
 
-(defn init_stack_with_tags
-  "Initializes state with preliminary tags"
-  [things]
-  (assign-tags things (make-push-state)))
 
 (defn tag-of
   "Returns the tag that refers to x
@@ -235,7 +219,7 @@
    Bnk of buttons can be found in things"
   [program things problem]
   (let [size (count problem)]
-    (loop [counter 0 state (run-push program (init_stack_with_tags things))]
+    (loop [counter 0 state (run-push program (init_stack things))]
       (if (>= counter size)
         (run-push program state)
         (recur (inc counter) (run-push program (push-item (tag-of (nth problem counter) things) 
@@ -429,5 +413,5 @@
   :variable-max-points false
   :use-lexicase-selection true)
 
-(System/exit 0) ;;Comment this line out if you're running this from clooj or an IDE
+;(System/exit 0) ;;Comment this line out if you're running this from clooj or an IDE
 
