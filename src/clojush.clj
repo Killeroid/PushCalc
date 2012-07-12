@@ -1286,6 +1286,24 @@ the code stack."
         (pop-item :boolean (pop-item :exec state)))
       state)))
 
+(define-registered 
+  exec_while
+  (fn [state]
+    (if (not (or (empty? (:exec state))
+                 (empty? (:boolean state))))
+      (if (first (:boolean state))
+        (let [new-item (list 'exec_while (first (:exec state)))]
+          (if (<= (count-points new-item) @global-max-points-in-program)
+            (push-item (first (:exec state))
+                       :exec
+                       (push-item new-item
+                                  :exec
+                                  (pop-item :exec (pop-item :boolean state))))
+            state))
+        state)
+      state)))
+        
+
 (define-registered code_length
   (fn [state]
     (if (not (empty? (:code state)))

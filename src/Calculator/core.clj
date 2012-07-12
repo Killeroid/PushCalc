@@ -320,6 +320,7 @@
                               ;exec_fromzipnode
                               exec_if
                               exec_when
+                              exec_while
                               ;exec_fromziplefts
                               ;exec_fromzipchildren
                               ;exec_k
